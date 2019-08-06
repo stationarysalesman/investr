@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 import datetime
 import matplotlib.pyplot as plt
 import numpy as np
+import csv
 from datetime import date
 
 
@@ -101,7 +102,9 @@ def main():
     plt.xlabel('Bill Loan Period')
     plt.ylabel('Treasury Bill Rate (%)')
 
-    plt.show()
+    # Actually plot the data?
+    #plt.show()
+    
     monotonic = True
     r = bill_rates[0]
     for rate in bill_rates[1:]:
@@ -116,8 +119,71 @@ def main():
         reporter = 'Abnormal'
 
     print('Money Market Indicator: %s' % reporter)
-    return
 
+
+    # Another indicator is the spread between the 10 yr and 30 yr (long-term bond market)
+    # Investors buying up 30 yr bonds, depressing their yield, indicates that they want to 
+    # lock in high interest rates now (before the anticipated drop)
+    spread_10yr30yr = yields[-1] - yields[-3]
+    spread_20yr30yr = yields[-1] - yields[-2]
+    print('20 year/30 year Treasury bond yield spread: %1.2f%%' % spread_20yr30yr)
+    print('10 year/30 year Treasury bond yield spread: %1.2f%%' % spread_10yr30yr)
+
+    # Several other long-term market indicators include:
+    # - the yield on a 10 year bond ( > 10% means sell)
+    # - the interest rate ( > 10% means sell)
+    # - whether we have reached our expected return from the stock market already (10%)
+    # - institutions' tendency to sell after realizing 10% gains on the stock market
+    # Recessions often occur when the interest on a long-term security (like the 10 yr bond) rises
+    # and especially when it rises beyond 10%
+    # So, we want to know what the 10 year bond yield is specifically
+    print('10 year Treasury bond yield: %1.2f%%' % yields[-3])
+
+
+    # Another indicator is the spread between corporate bonds (Moody's BAA, just above "Junk bonds") 
+    # and the Treasury 10 year bill
+    now = date.today()
+    now_t = now.timetuple()
+    year = str(now_t[0])
+    month = str(now_t[1])
+    day = str(now_t[2])
+    last_year = str(int(year) - 1)
+    date_begin = last_year + '-' + month + '-' + day
+    date_today = year + '-' + month + '-' + day
+    corporate_spread_url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?bgcolor=%23e1e9f0&chart_type=line&drp=0&fo=open%20sans&graph_bgcolor=%23ffffff&height=450&mode=fred&recession_bars=on&txtcolor=%23444444&ts=12&tts=12&width=1168&nt=0&thu=0&trc=0&show_legend=yes&show_axis_titles=yes&show_tooltip=yes&id=BAA10Y&scale=left&cosd=' + date_begin + '&coed=' + date_today + '&line_color=%234572a7&link_values=false&line_style=solid&mark_type=none&mw=3&lw=2&ost=-99999&oet=99999&mma=0&fml=a&fq=Daily&fam=avg&fgst=lin&fgsnd=2009-06-01&line_index=1&transformation=lin&vintage_date=2019-08-06&revision_date=2019-08-06&nd=1986-01-02'
+    r = requests.get(corporate_spread_url)
+    csv_text = r.text
+    entries = re.split('\n', csv_text)
+    
+    # Let's just look at the last 30 days or so
+    desired_entries = entries[-31:-1] # last entry is the final newline?
+    entry_dates = []
+    entry_rates = []
+    for entry in desired_entries:
+        current_date, rate = re.split(',', entry)
+        if rate == '.': # No data for this day
+            continue
+        entry_dates.append(current_date)
+        entry_rates.append(rate)
+    entry_dates_str = [x.encode('ascii') for x in entry_dates]
+    entry_rates_str = [x.encode('ascii') for x in entry_rates]
+    entry_rates_float = [float(x) for x in entry_rates_str]
+    
+    entries = len(entry_dates_str)
+    xs = np.arange(entries)
+    plt.figure(3)
+    plt.xticks(xs[::2], tuple(entry_dates_str[::2]))
+    plt.plot(xs, entry_rates_float)
+    title_str_3 = 'Moody\'s Corporate Bond Yield Relative to the 10 Year Treasury Note'
+    plt.title(title_str_3)
+    plt.axis([0, entries, min(entry_rates_float) * 0.9 , max(entry_rates_float) * 1.1])
+    plt.xlabel('Date')
+    plt.ylabel('Yield Spread (%)')
+    
+    # Plot? 
+    #plt.show()
+
+    # Let's determine how long the spread has been 
 # literally fuck you python I can't believe you make me do this every time
 if __name__ == "__main__":
     main()
