@@ -12,7 +12,13 @@ from FederalFundsRateHTMLParser import FederalFundsRateHTMLParser
 from DJIAHTMLParser import DJIAHTMLParser
 
 
-
+def get_date():
+    now = date.today()
+    now_t = now.timetuple()
+    year = str(now_t[0])
+    month = str(now_t[1])
+    day = str(now_t[2])
+    return year, month, day
 
 
 def get_datestr():
@@ -25,11 +31,7 @@ def get_datestr():
 
 
 def get_corporate_bond_spread():
-    now = date.today()
-    now_t = now.timetuple()
-    year = str(now_t[0])
-    month = str(now_t[1])
-    day = str(now_t[2])
+    year, month, day = get_date()
     last_year = str(int(year) - 1)
     date_begin = last_year + '-' + month + '-' + day
     date_today = year + '-' + month + '-' + day
@@ -57,6 +59,7 @@ def get_fed_funds_rates():
     # As of 2019/08/06, NY Fed requires MM/DD/YYYY format for the date range
     # NOTE: The Federal Funds rate is NOT published on weekends and holidays, so 
     # the dates returned from the database may not reflect the requested dates!
+    year, month, day = get_date() 
     post_data['txtDate1'] = month + '/' + day + '/' + str(int(year)-1)
     post_data['txtDate2'] = month + '/' + day + '/' + str(int(year))
 
@@ -97,6 +100,7 @@ def get_todays_stonks():
             d['Previous Close'] = item['close_yesterday']
             d['Market Cap'] = item['market_cap']
             stonks.append(d)
+        break 
     return stonks 
 
 
@@ -131,14 +135,7 @@ def get_fed_xml_entry(url):
 
 
 def get_treasury_yields():    
-    # what day is it??
-
-    now = date.today()
-    now_t = now.timetuple()
-    year = now_t[0]
-    month = now_t[1]
-    day = now_t[2]
-
+    year, month, day = get_date()
     # Construct HTTP GET request
     base_url = 'https://data.treasury.gov/feed.svc/DailyTreasuryYieldCurveRateData?$filter=month(NEW_DATE)%20eq%20'
     base_url += str(month).zfill(2)
@@ -150,14 +147,7 @@ def get_treasury_yields():
 
 
 def get_treasury_bill_rates():
-    # what day is it??
-
-    now = date.today()
-    now_t = now.timetuple()
-    year = now_t[0]
-    month = now_t[1]
-    day = now_t[2]
-
+    year, month, day = get_date()
     # Construct HTTP GET request
     base_url = 'https://data.treasury.gov/feed.svc/DailyTreasuryBillRateData?$filter=month(INDEX_DATE)%20eq%20'
     base_url += str(month).zfill(2)
@@ -307,9 +297,8 @@ def main():
     stonk_symbols = [d['Symbol'] for d in stonks]
     stonk_day_changes = [float(d['Change (%)']) for d in stonks]
     plt.xticks(np.arange(entries), stonk_symbols)
+    plt.axhline(y=0, color='r', linestyle='-')
     plt.plot(np.arange(entries), stonk_day_changes)
-    horiz_line_data = np.array([0 for i in xrange(len(np.arange(entries)))])
-    plt.plot(xs, horiz_line_data, 'r--') # Plot a line through 0
     title_str_6 = 'Dow Jones Industrial Average Percent Change'
     plt.title(title_str_6)
     plt.axis([0, 30, min(stonk_day_changes) - 1, max(stonk_day_changes) + 1])
