@@ -6,9 +6,10 @@ import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import csv
+import json
 from datetime import date
 from FederalFundsRateHTMLParser import FederalFundsRateHTMLParser
-
+from DJIAHTMLParser import DJIAHTMLParser
 
 def get_fed_xml_entry(url):
     """Returns the most recent Federal entry data from an XML tree found at url (must be a Federal yield curve/bill rate url)
@@ -103,9 +104,6 @@ def main():
     plt.xlabel('Bill Loan Period')
     plt.ylabel('Treasury Bill Rate (%)')
 
-    # Actually plot the data?
-    #plt.show()
-    
     monotonic = True
     r = bill_rates[0]
     for rate in bill_rates[1:]:
@@ -235,7 +233,36 @@ def main():
     plt.xlabel('Date')
     plt.ylabel('Federal Funds Rate (%)')
 
-    plt.show()
+
+
+    ################### Technical Analysis ###################################
+    key = 'I0yZMg8jBWJ2b3czdNFo5mwIBSHIydSzM2oTOWhMpHzo7V6jdhKkrIZ8cLqa' # api key
+    parser2 = DJIAHTMLParser()
+    url = 'https://www.cnbc.com/dow-30/'
+    r = requests.get(url)
+    parser2.feed(r.text)
+    djia_indexes = parser2.get_indexes()
+    """
+    change_map = dict()
+    # Get the actual stock trading data from the API
+    chunks = [djia_indexes[i:i+5] for i in xrange(0, len(djia_indexes), 5)]
+    for elems in chunks:
+        idxs_lst = ','.join(elems)
+        realtime_request_url = 'https://api.worldtradingdata.com/api/v1/stock'
+        payload = {'symbol': idx_lst, 'api_token':key}
+    """
+
+    realtime_request_url = 'https://api.worldtradingdata.com/api/v1/stock'
+    payload = {'symbol': 'AXP', 'api_token':key}
+    r = requests.get(realtime_request_url, params=payload)
+    stock_json = json.loads(r.text)
+    print(stock_json)
+
+    print(stock_json['data'][0]['symbol'])
+    print(stock_json['data'][0]['name'])
+    print(stock_json['data'][0]['price'])
+    print(stock_json['data'][0]['day_change'])
+
 # literally fuck you python I can't believe you make me do this every time
 if __name__ == "__main__":
     main()
