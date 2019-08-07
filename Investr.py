@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import csv
 from datetime import date
+from FederalFundsRateHTMLParser import FederalFundsRateHTMLParser
 
 
 def get_fed_xml_entry(url):
@@ -183,7 +184,58 @@ def main():
     # Plot? 
     #plt.show()
 
-    # Let's determine how long the spread has been 
+    # Let's determine how long the spread has been increasing, if at all
+    idx = len(entry_rates_str) - 1
+    while (idx > 0 and entry_rates_float[idx] > entry_rates_float[idx-1]):
+        idx -= 1
+    print('Corporate bond yield spread (relative to 10 year Treasury note) has been rising for %d days (since %s)' % (len(entry_rates_str) - 1 - idx, entry_dates_str[idx]))
+
+
+    # The federal funds rate (the interest rate banks charge other banks for short term loans) 
+    # is a bellwether of the direction in which the Fed wants to take the economy.
+    # Historically, the federal funds rate has increased leading up to a recession, and 
+    # turns around during the peak of the recession, declining after. 
+
+    # The Federal Reserve Bank of New York provides historical effective federal funds rates
+    post_url = 'https://apps.newyorkfed.org/markets/autorates/fed-funds-search-result-page'
+    post_data = dict()
+    # As of 2019/08/06, NY Fed requires MM/DD/YYYY format for the date range
+    # NOTE: The Federal Funds rate is NOT published on weekends and holidays, so 
+    # the dates returned from the database may not reflect the requested dates!
+    post_data['txtDate1'] = month + '/' + day + '/' + str(int(year)-1)
+    post_data['txtDate2'] = month + '/' + day + '/' + str(int(year))
+
+    r = requests.post(post_url, post_data)
+    parser = FederalFundsRateHTMLParser()
+    parser.feed(r.text)
+    fed_funds_rates = parser.get_rates()
+    fed_funds_dates_lst = sorted(fed_funds_rates)
+    fed_funds_rates_lst = [fed_funds_rates[x] for x in fed_funds_dates_lst] 
+    fed_funds_dates_str = [str(x) for x in fed_funds_dates_lst]
+    funds_entries = len(fed_funds_rates_lst)
+    xs_funds = np.arange(funds_entries)
+    plt.figure(4)
+    plt.subplot(211)
+    plt.xticks(xs_funds[::30], fed_funds_dates_str[::30]) 
+    plt.plot(xs_funds, fed_funds_rates_lst)
+    title_str_4 = 'Federal Funds Rates (past year)'
+    plt.title(title_str_4)
+    plt.axis([0, funds_entries, 0, 25])
+    plt.xlabel('Date')
+    plt.ylabel('Federal Funds Rate (%)')
+
+    # Also make a subplot of the past 30 days
+    plt.subplot(212)
+    new_xs = fed_funds_dates_str[-30:] 
+    plt.xticks(np.arange(30)[::3], new_xs[::3])
+    plt.plot(np.arange(30), fed_funds_rates_lst[-30:])
+    title_str_5 = 'Federal Funds Rates (past month)'
+    plt.title(title_str_5)
+    plt.axis([0, 30, min(fed_funds_rates_lst) * 0.95, max(fed_funds_rates_lst) * 1.05])
+    plt.xlabel('Date')
+    plt.ylabel('Federal Funds Rate (%)')
+
+    plt.show()
 # literally fuck you python I can't believe you make me do this every time
 if __name__ == "__main__":
     main()
