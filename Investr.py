@@ -11,6 +11,106 @@ from datetime import date
 from FederalFundsRateHTMLParser import FederalFundsRateHTMLParser
 from DJIAHTMLParser import DJIAHTMLParser
 
+
+
+
+
+def get_datestr():
+    now = date.today()
+    now_t = now.timetuple()
+    year = now_t[0]
+    month = now_t[1]
+    day = now_t[2]
+    return str(year) + str(month).zfill(2) + str(day).zfill(2) 
+
+
+def get_corporate_bond_spread():
+    now = date.today()
+    now_t = now.timetuple()
+    year = str(now_t[0])
+    month = str(now_t[1])
+    day = str(now_t[2])
+    last_year = str(int(year) - 1)
+    date_begin = last_year + '-' + month + '-' + day
+    date_today = year + '-' + month + '-' + day
+    corporate_spread_url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?bgcolor=%23e1e9f0&chart_type=line&drp=0&fo=open%20sans&graph_bgcolor=%23ffffff&height=450&mode=fred&recession_bars=on&txtcolor=%23444444&ts=12&tts=12&width=1168&nt=0&thu=0&trc=0&show_legend=yes&show_axis_titles=yes&show_tooltip=yes&id=BAA10Y&scale=left&cosd=' + date_begin + '&coed=' + date_today + '&line_color=%234572a7&link_values=false&line_style=solid&mark_type=none&mw=3&lw=2&ost=-99999&oet=99999&mma=0&fml=a&fq=Daily&fam=avg&fgst=lin&fgsnd=2009-06-01&line_index=1&transformation=lin&vintage_date=2019-08-06&revision_date=2019-08-06&nd=1986-01-02'
+    r = requests.get(corporate_spread_url)
+    csv_text = r.text
+    entries = re.split('\n', csv_text)
+    
+    # Let's just look at the last 30 days or so
+    desired_entries = entries[-31:-1] # last entry is the final newline?
+    entry_dates = []
+    entry_rates = []
+    for entry in desired_entries:
+        current_date, rate = re.split(',', entry)
+        if rate == '.': # No data for this day
+            continue
+        entry_dates.append(current_date)
+        entry_rates.append(rate)
+    return entry_dates, entry_rates 
+
+
+def get_fed_funds_rates():
+    post_url = 'https://apps.newyorkfed.org/markets/autorates/fed-funds-search-result-page'
+    post_data = dict()
+    # As of 2019/08/06, NY Fed requires MM/DD/YYYY format for the date range
+    # NOTE: The Federal Funds rate is NOT published on weekends and holidays, so 
+    # the dates returned from the database may not reflect the requested dates!
+    post_data['txtDate1'] = month + '/' + day + '/' + str(int(year)-1)
+    post_data['txtDate2'] = month + '/' + day + '/' + str(int(year))
+
+    r = requests.post(post_url, post_data)
+    parser = FederalFundsRateHTMLParser()
+    parser.feed(r.text)
+    fed_funds_rates = parser.get_rates()
+    return fed_funds_rates
+
+
+def get_todays_stonks():
+    key = 'I0yZMg8jBWJ2b3czdNFo5mwIBSHIydSzM2oTOWhMpHzo7V6jdhKkrIZ8cLqa' # api key
+    parser2 = DJIAHTMLParser()
+    url = 'https://www.cnbc.com/dow-30/'
+    r = requests.get(url)
+    parser2.feed(r.text)
+    djia_indexes = parser2.get_indexes()
+
+    # NOTE: The free API is limited to 250 requests per day, so don't test with 
+    # all the requests every time!
+    stonks = [] 
+    # Get the actual stock trading data from the API
+    chunks = [djia_indexes[i:i+5] for i in xrange(0, len(djia_indexes), 5)]
+    for elems in chunks:
+        idxs_lst = ','.join(elems[:2]) 
+        realtime_request_url = 'https://api.worldtradingdata.com/api/v1/stock'
+        payload = {'symbol': idxs_lst, 'api_token':key}
+        r = requests.get(realtime_request_url, params=payload)
+        stock_json = json.loads(r.text)
+        for item in stock_json['data']:
+            d = dict()
+            d['Symbol'] = item['symbol']
+            d['Name'] = item['name']
+            d['Price'] = item['price']
+            d['Opening Price'] = item['price_open']
+            d['Change (USD)'] = item['day_change']
+            d['Change (%)'] = item['change_pct']
+            d['Previous Close'] = item['close_yesterday']
+            d['Market Cap'] = item['market_cap']
+            stonks.append(d)
+    return stonks 
+
+
+def export_stonks_to_csv(stonks):
+    """Write a list of dicts out to csv"""
+    with open('stonks' + get_datestr() + '.csv', 'w') as csvfile:
+        fieldnames = ['Name', 'Symbol', 'Price', 'Opening Price', 'Previous Close', 'Change (USD)', 'Change (%)', 'Market Cap']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for stonk in stonks:
+            writer.writerow(stonk)
+    return
+
+
 def get_fed_xml_entry(url):
     """Returns the most recent Federal entry data from an XML tree found at url (must be a Federal yield curve/bill rate url)
     
@@ -73,8 +173,6 @@ def get_treasury_bill_rates():
     return yields, entry_date
 
 
-
-    return bill_rates, entry_date
 def main():
     print('-------------------------- here we are getting the -----------------------------')
     print('------------------------------- fInAnCiAl DaTa ---------------------------------')
@@ -141,33 +239,10 @@ def main():
 
     # Another indicator is the spread between corporate bonds (Moody's BAA, just above "Junk bonds") 
     # and the Treasury 10 year bill
-    now = date.today()
-    now_t = now.timetuple()
-    year = str(now_t[0])
-    month = str(now_t[1])
-    day = str(now_t[2])
-    last_year = str(int(year) - 1)
-    date_begin = last_year + '-' + month + '-' + day
-    date_today = year + '-' + month + '-' + day
-    corporate_spread_url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?bgcolor=%23e1e9f0&chart_type=line&drp=0&fo=open%20sans&graph_bgcolor=%23ffffff&height=450&mode=fred&recession_bars=on&txtcolor=%23444444&ts=12&tts=12&width=1168&nt=0&thu=0&trc=0&show_legend=yes&show_axis_titles=yes&show_tooltip=yes&id=BAA10Y&scale=left&cosd=' + date_begin + '&coed=' + date_today + '&line_color=%234572a7&link_values=false&line_style=solid&mark_type=none&mw=3&lw=2&ost=-99999&oet=99999&mma=0&fml=a&fq=Daily&fam=avg&fgst=lin&fgsnd=2009-06-01&line_index=1&transformation=lin&vintage_date=2019-08-06&revision_date=2019-08-06&nd=1986-01-02'
-    r = requests.get(corporate_spread_url)
-    csv_text = r.text
-    entries = re.split('\n', csv_text)
-    
-    # Let's just look at the last 30 days or so
-    desired_entries = entries[-31:-1] # last entry is the final newline?
-    entry_dates = []
-    entry_rates = []
-    for entry in desired_entries:
-        current_date, rate = re.split(',', entry)
-        if rate == '.': # No data for this day
-            continue
-        entry_dates.append(current_date)
-        entry_rates.append(rate)
+    entry_dates, entry_rates = get_corporate_bond_spread()
     entry_dates_str = [x.encode('ascii') for x in entry_dates]
     entry_rates_str = [x.encode('ascii') for x in entry_rates]
     entry_rates_float = [float(x) for x in entry_rates_str]
-    
     entries = len(entry_dates_str)
     xs = np.arange(entries)
     plt.figure(3)
@@ -179,15 +254,13 @@ def main():
     plt.xlabel('Date')
     plt.ylabel('Yield Spread (%)')
     
-    # Plot? 
-    #plt.show()
 
     # Let's determine how long the spread has been increasing, if at all
     idx = len(entry_rates_str) - 1
     while (idx > 0 and entry_rates_float[idx] > entry_rates_float[idx-1]):
         idx -= 1
     print('Corporate bond yield spread (relative to 10 year Treasury note) has been rising for %d days (since %s)' % (len(entry_rates_str) - 1 - idx, entry_dates_str[idx]))
-
+    print('Most recent data published on %s' % entry_dates_str[-1])
 
     # The federal funds rate (the interest rate banks charge other banks for short term loans) 
     # is a bellwether of the direction in which the Fed wants to take the economy.
@@ -195,18 +268,7 @@ def main():
     # turns around during the peak of the recession, declining after. 
 
     # The Federal Reserve Bank of New York provides historical effective federal funds rates
-    post_url = 'https://apps.newyorkfed.org/markets/autorates/fed-funds-search-result-page'
-    post_data = dict()
-    # As of 2019/08/06, NY Fed requires MM/DD/YYYY format for the date range
-    # NOTE: The Federal Funds rate is NOT published on weekends and holidays, so 
-    # the dates returned from the database may not reflect the requested dates!
-    post_data['txtDate1'] = month + '/' + day + '/' + str(int(year)-1)
-    post_data['txtDate2'] = month + '/' + day + '/' + str(int(year))
-
-    r = requests.post(post_url, post_data)
-    parser = FederalFundsRateHTMLParser()
-    parser.feed(r.text)
-    fed_funds_rates = parser.get_rates()
+    fed_funds_rates = get_fed_funds_rates() 
     fed_funds_dates_lst = sorted(fed_funds_rates)
     fed_funds_rates_lst = [fed_funds_rates[x] for x in fed_funds_dates_lst] 
     fed_funds_dates_str = [str(x) for x in fed_funds_dates_lst]
@@ -236,50 +298,31 @@ def main():
 
 
     ################### Technical Analysis ###################################
-    key = 'I0yZMg8jBWJ2b3czdNFo5mwIBSHIydSzM2oTOWhMpHzo7V6jdhKkrIZ8cLqa' # api key
-    parser2 = DJIAHTMLParser()
-    url = 'https://www.cnbc.com/dow-30/'
-    r = requests.get(url)
-    parser2.feed(r.text)
-    djia_indexes = parser2.get_indexes()
 
-    # NOTE: The free API is limited to 250 requests per day, so don't test with 
-    # all the requests every time!
-    """    
-    stonks = [] 
-    # Get the actual stock trading data from the API
-    chunks = [djia_indexes[i:i+5] for i in xrange(0, len(djia_indexes), 5)]
-    for elems in chunks:
-        idxs_lst = ','.join(elems[:2]) # just test with two for now
-        realtime_request_url = 'https://api.worldtradingdata.com/api/v1/stock'
-        payload = {'symbol': idxs_lst, 'api_token':key}
-        r = requests.get(realtime_request_url, params=payload)
-        stock_json = json.loads(r.text)
-        for item in stock_json['data']:
-            d = dict()
-            d['symbol'] = item['symbol']
-            d['name'] = item['name']
-            d['price'] = item['price']
-            d['price_open'] = item['price_open']
-            d['day_change'] = item['day_change']
-            d['change_pct'] = item['change_pct']
-            stonks.append(d)
-        break # don't continue, save API calls for now
+    stonks = get_todays_stonks()
+    
     # Visualize the data
     plt.figure(5)
     entries = len(stonks)
-    stonk_symbols = [d['symbol'] for d in stonks]
-    stonk_day_changes = [float(d['change_pct']) for d in stonks]
+    stonk_symbols = [d['Symbol'] for d in stonks]
+    stonk_day_changes = [float(d['Change (%)']) for d in stonks]
     plt.xticks(np.arange(entries), stonk_symbols)
     plt.plot(np.arange(entries), stonk_day_changes)
+    horiz_line_data = np.array([0 for i in xrange(len(np.arange(entries)))])
+    plt.plot(xs, horiz_line_data, 'r--') # Plot a line through 0
     title_str_6 = 'Dow Jones Industrial Average Percent Change'
     plt.title(title_str_6)
     plt.axis([0, 30, min(stonk_day_changes) - 1, max(stonk_day_changes) + 1])
     plt.xlabel('Ticker Symbol')
     plt.ylabel('Day Change (%)')
-    """
+
+    # Make a table and save to CSV for reporting
+    export_stonks_to_csv(stonks) 
 
 
+
+    # Show all the plots
+    plt.show()
 # literally fuck you python I can't believe you make me do this every time
 if __name__ == "__main__":
     main()
