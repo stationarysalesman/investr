@@ -171,50 +171,109 @@ def load_vix_data():
     entries = re.split('\n', csv_text)
     entries_ascii = [x.encode('ascii') for x in entries] # Unicode -> ASCII
     entries_stripped = [x.strip() for x in entries_ascii] # remove trailing \r
-    matrix = entries_stripped[1:] # ignore copyright text (i.e. fuck the police)
+    matrix = entries_stripped[2:-2] # ignore copyright text (i.e. fuck the police), header, and end
     dates = []
     vix_opens = []
     vix_highs = []
     vix_lows = []
     vix_closes = []
     for i in matrix:
-        dates.append(i[0])
-        vix_opens.append(i[1])
-        vix_highs.append(i[2])
-        vix_lows.append(i[3])
-        vix_closes.append(i[4])
+        s = re.split(',', i)
+        dates.append(s[0])
+        vix_opens.append(s[1])
+        vix_highs.append(s[2])
+        vix_lows.append(s[3])
+        vix_closes.append(s[4])
     return dates, vix_opens, vix_highs, vix_lows, vix_closes
 
 
 def compute_ema_helper(data, output, n, alpha, i):
-    """Recursive helper functin for compute_ema"""
-    # base case
-    if (i == (n-1)):
-        output[i] = np.mean(data[:i])
-        return 
-    else:
-        compute_ema_helper(data, output, n, alpha, i-1)
-        output[i] =  alpha * data[i] + (1 - alpha) * output[i-1] 
-        return
+    """Iterative helper functin for compute_ema"""
+    # base case (i starts at n-1)
+    output[i] = np.mean(data[0:n])
+    limit = len(data) - 1 
+    i += 1
+    while (i <= limit):
+        output[i] =  output[i-1] + alpha * (data[i] - output[i-1]) 
+        i += 1
+    return
 
 
 def compute_ema(data, n):
     """Compute the n day exponential moving average of stock data"""
+    alpha = 2 / float(n + 1) # a reasonable weighting metric
+    i = n-1 
+    output = np.zeros(len(data))
+    compute_ema_helper(data, output, n, alpha, i)
+    return output
+
+
+def compute_macd(data):
+    """Compute the moving average convergent/divergent line for any stock, index, or mutual fund. 
     
-
-def compute_n_macd(dates, data, n):
-    ema = []
-    calcs = len(dates) - n - 1 # total number of moving averages we can calculate
-
-    # Formula: EMA(today) = Price(today) * (2 / (n + 1)) + EMA(yesterday) * (1 - (2 / (n + 1)))
-    # We will set the first moving average to the sample moving average as a base case
+    @param data: a 1D numpy array of prices
+    @param n: number of data points in a single averaging step (i.e. an n-day moving average)
+    @return output: the macd line with the same length as data (the first n-1 entries are 0)
     
+    We will use the 12-day and 26-day exponential moving averages for our calculations."""
+    
+    macd_26 = compute_ema(data, 26)
+    macd_12 = compute_ema(data, 12)
 
-def compute_vix_macd(vix_data):
+    # For calculations we need to strip off the zero values
+    macd_26_stripped = macd_26[25:]
+    macd_12_stripped = macd_12[25:] # consistency
+    macd = macd_12_stripped - macd_26_stripped
+    macd_signal = compute_ema(macd, 9)
+    macd_signal_stripped = macd_signal[8:] 
+    macd_stripped = macd[8:]
 
-    """ (from stockta.com) MACD Analysis: The MACD analysis compares the MACD to the signal MACD line and their relationship to zero for any stock or commodity. The MACD is calculated by subtracting the 26 day[slow MACD] expotential moving average (EMA) from the 12 day EMA [fast MACD]. The MACD smooth line (also known as signal line) is the 9 day exponential moving average (EMA) of the MACD. The MACD histogram is the difference between the MACD line and the signal line. Stock technical analysis and alerts will include MACD trending, fast line crossover at zero, crossovers of the fast and slow MACD, histogram and convergences / divergences between the MACD, Signal MACD, histogram and stock price.
-    Read more at http://www.stockta.com/cgi-bin/analysis.pl?symb=VIX.IN&mode=table&table=macd#RPv8tgYRQYtGHkDv.99"""
+    histogram = macd_stripped - macd_signal_stripped
+    return macd_26_stripped, macd_12_stripped, macd, histogram 
 
+def plot_macd(title, data, dates):
+    """Plot the MACD (1 year plus a 1 month summary with the 12-day EMA) of a stock, index, or mutual fund. 
+    
+    @param title: Title of the chart
+    @param data: Data (stock closing prices, etc) as a 1D numpy array
+    @param dates: A list of dates to map onto the xticks for plotting"""
+    
+    macd_26_stripped, macd_12_stripped, macd, histogram = compute_macd(data)
+    plt.figure()
+    plt.subplot(211)
+    diff = len(dates) - len(macd_26_stripped) # Plots need the same size axes
+    dates_stripped = dates[diff:]
+    entries = len(dates_stripped) 
+    plt.xticks(np.arange(entries)[::26], dates_stripped[::26])
+    title_str_7 = title + ' MACD (1 yr)'
+    plt.title(title_str_7)
+    plt.plot(np.arange(entries)[entries-365:], data[len(data)-365:], label=title)
+    plt.plot(np.arange(entries)[entries-365:], macd_26_stripped[entries-365:], label='26-day EMA')
+    plt.plot(np.arange(entries)[entries-365:], macd_12_stripped[entries-365:], label='12-day EMA')
+    plt.legend() 
+    plt.subplot(212) 
+    xs_2 = np.arange(entries)[8:]
+    m = len(xs_2)
+    plt.xticks(np.arange(entries)[::26], dates_stripped[::26])
+    plt.bar(xs_2[m-365:], histogram[m-365:], label='Histogram')
+    plt.legend() 
+   
+
+    # Also plot the past 30 days
+    plt.figure()
+    plt.subplot(211)
+    plt.xticks(np.arange(entries)[::2], dates_stripped[::2])
+    title_str_8 = title + ' MACD (1 month)'
+    plt.title(title_str_8)
+    plt.plot(np.arange(entries)[entries-30:], data[len(data)-30:], label=title)
+    plt.plot(np.arange(entries)[entries-30:], macd_12_stripped[entries-30:], label='12-day EMA')
+    plt.legend()
+    plt.subplot(212) 
+    xs_2 = np.arange(entries)[8:]
+    m = len(xs_2)
+    plt.xticks(np.arange(entries)[::2], dates_stripped[::2])
+    plt.bar(xs_2[m-30:], histogram[m-30:], label='Histogram')
+    plt.legend()
     return
 
 
@@ -222,7 +281,8 @@ def main():
     print('-------------------------- here we are getting the -----------------------------')
     print('------------------------------- fInAnCiAl DaTa ---------------------------------')
     print('------------------------------------- ;) ---------------------------------------')
-    
+   
+    """
     # A key indicator of the market is the spread between the 3 month and 10 year bond yield
     yields, yield_date = get_treasury_yields()
     plt.figure(1)
@@ -362,9 +422,12 @@ def main():
 
     # Make a table and save to CSV for reporting
     export_stonks_to_csv(stonks) 
-
-
-
+    """
+    # Compute the MACD for the VIX
+    dates, vix_opens, vix_highs, vix_lows, vix_closes = load_vix_data()
+    vix_closes_float = [float(x) for x in vix_closes]
+    plot_macd('Volatility Index', vix_closes_float, dates) 
+   
     # Show all the plots
     plt.show()
 # literally fuck you python I can't believe you make me do this every time
