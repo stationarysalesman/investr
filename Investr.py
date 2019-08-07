@@ -163,6 +163,61 @@ def get_treasury_bill_rates():
     return yields, entry_date
 
 
+def load_vix_data():
+    """Load the most recent VIX data from cboe.com"""
+    url = 'http://www.cboe.com/publish/scheduledtask/mktdata/datahouse/vixcurrent.csv'
+    r = requests.get(url)
+    csv_text = r.text
+    entries = re.split('\n', csv_text)
+    entries_ascii = [x.encode('ascii') for x in entries] # Unicode -> ASCII
+    entries_stripped = [x.strip() for x in entries_ascii] # remove trailing \r
+    matrix = entries_stripped[1:] # ignore copyright text (i.e. fuck the police)
+    dates = []
+    vix_opens = []
+    vix_highs = []
+    vix_lows = []
+    vix_closes = []
+    for i in matrix:
+        dates.append(i[0])
+        vix_opens.append(i[1])
+        vix_highs.append(i[2])
+        vix_lows.append(i[3])
+        vix_closes.append(i[4])
+    return dates, vix_opens, vix_highs, vix_lows, vix_closes
+
+
+def compute_ema_helper(data, output, n, alpha, i):
+    """Recursive helper functin for compute_ema"""
+    # base case
+    if (i == (n-1)):
+        output[i] = np.mean(data[:i])
+        return 
+    else:
+        compute_ema_helper(data, output, n, alpha, i-1)
+        output[i] =  alpha * data[i] + (1 - alpha) * output[i-1] 
+        return
+
+
+def compute_ema(data, n):
+    """Compute the n day exponential moving average of stock data"""
+    
+
+def compute_n_macd(dates, data, n):
+    ema = []
+    calcs = len(dates) - n - 1 # total number of moving averages we can calculate
+
+    # Formula: EMA(today) = Price(today) * (2 / (n + 1)) + EMA(yesterday) * (1 - (2 / (n + 1)))
+    # We will set the first moving average to the sample moving average as a base case
+    
+
+def compute_vix_macd(vix_data):
+
+    """ (from stockta.com) MACD Analysis: The MACD analysis compares the MACD to the signal MACD line and their relationship to zero for any stock or commodity. The MACD is calculated by subtracting the 26 day[slow MACD] expotential moving average (EMA) from the 12 day EMA [fast MACD]. The MACD smooth line (also known as signal line) is the 9 day exponential moving average (EMA) of the MACD. The MACD histogram is the difference between the MACD line and the signal line. Stock technical analysis and alerts will include MACD trending, fast line crossover at zero, crossovers of the fast and slow MACD, histogram and convergences / divergences between the MACD, Signal MACD, histogram and stock price.
+    Read more at http://www.stockta.com/cgi-bin/analysis.pl?symb=VIX.IN&mode=table&table=macd#RPv8tgYRQYtGHkDv.99"""
+
+    return
+
+
 def main():
     print('-------------------------- here we are getting the -----------------------------')
     print('------------------------------- fInAnCiAl DaTa ---------------------------------')
