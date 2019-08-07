@@ -242,26 +242,43 @@ def main():
     r = requests.get(url)
     parser2.feed(r.text)
     djia_indexes = parser2.get_indexes()
-    """
-    change_map = dict()
+
+    # NOTE: The free API is limited to 250 requests per day, so don't test with 
+    # all the requests every time!
+    """    
+    stonks = [] 
     # Get the actual stock trading data from the API
     chunks = [djia_indexes[i:i+5] for i in xrange(0, len(djia_indexes), 5)]
     for elems in chunks:
-        idxs_lst = ','.join(elems)
+        idxs_lst = ','.join(elems[:2]) # just test with two for now
         realtime_request_url = 'https://api.worldtradingdata.com/api/v1/stock'
-        payload = {'symbol': idx_lst, 'api_token':key}
+        payload = {'symbol': idxs_lst, 'api_token':key}
+        r = requests.get(realtime_request_url, params=payload)
+        stock_json = json.loads(r.text)
+        for item in stock_json['data']:
+            d = dict()
+            d['symbol'] = item['symbol']
+            d['name'] = item['name']
+            d['price'] = item['price']
+            d['price_open'] = item['price_open']
+            d['day_change'] = item['day_change']
+            d['change_pct'] = item['change_pct']
+            stonks.append(d)
+        break # don't continue, save API calls for now
+    # Visualize the data
+    plt.figure(5)
+    entries = len(stonks)
+    stonk_symbols = [d['symbol'] for d in stonks]
+    stonk_day_changes = [float(d['change_pct']) for d in stonks]
+    plt.xticks(np.arange(entries), stonk_symbols)
+    plt.plot(np.arange(entries), stonk_day_changes)
+    title_str_6 = 'Dow Jones Industrial Average Percent Change'
+    plt.title(title_str_6)
+    plt.axis([0, 30, min(stonk_day_changes) - 1, max(stonk_day_changes) + 1])
+    plt.xlabel('Ticker Symbol')
+    plt.ylabel('Day Change (%)')
     """
 
-    realtime_request_url = 'https://api.worldtradingdata.com/api/v1/stock'
-    payload = {'symbol': 'AXP', 'api_token':key}
-    r = requests.get(realtime_request_url, params=payload)
-    stock_json = json.loads(r.text)
-    print(stock_json)
-
-    print(stock_json['data'][0]['symbol'])
-    print(stock_json['data'][0]['name'])
-    print(stock_json['data'][0]['price'])
-    print(stock_json['data'][0]['day_change'])
 
 # literally fuck you python I can't believe you make me do this every time
 if __name__ == "__main__":
