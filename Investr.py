@@ -10,7 +10,7 @@ import json
 from datetime import date
 from FederalFundsRateHTMLParser import FederalFundsRateHTMLParser
 from DJIAHTMLParser import DJIAHTMLParser
-
+from FINRAMarginDebtHTMLParser import FINRAMarginDebtHTMLParser
 
 def get_date():
     now = date.today()
@@ -69,6 +69,42 @@ def get_fed_funds_rates():
     fed_funds_rates = parser.get_rates()
     return fed_funds_rates
 
+
+
+def get_sp500_data():
+    """Get historical data for the S&P 500 index from the past year, up to and including today."""
+    key = 'I0yZMg8jBWJ2b3czdNFo5mwIBSHIydSzM2oTOWhMpHzo7V6jdhKkrIZ8cLqa' # api key
+    historical_request_url = 'https://api.worldtradingdata.com/api/v1/history'
+    year, month, day = get_date()
+    date_from = str(int(year)-1) + '-' + str(month).zfill(2) + '-' + str(day).zfill(2)
+    date_to = str(year) + '-' + str(month).zfill(2) + '-' + str(day).zfill(2)
+    payload = {'symbol': '^INX', 'date_from': date_from, 'date_to': date_to, 'api_token':key}
+    r = requests.get(historical_request_url, params=payload)
+    stock_json = json.loads(r.text)
+    dates = []
+    prices = []
+    tmp = dict()
+    for i in stock_json['history']:
+        date_str = i.encode('ascii')
+        y,m,d = re.split('-', date_str)
+        tmp[datetime.date(int(y), int(m), int(d))] = stock_json['history'][i]
+    dates = sorted(tmp)
+    prices = [tmp[x]['close'] for x in dates]
+    prices_float = [float(x.encode('ascii')) for x in prices]
+    dates_str = [str(x) for x in dates]
+    return(dates_str, prices_float)
+
+
+def plot_sp500_margin(sp_dates, sp_prices, margin_data):
+    """Plot the S&P 500 index along with the difference between the index and outstanding margin debt."""
+
+    plt.figure()
+    entries = len(sp_dates) 
+    plt.xticks(np.arange(entries)[::26], sp_dates[::26])
+    title_str = 'S&P 500 Index'
+    plt.title(title_str)
+    plt.plot(np.arange(entries), data, label='S&P 500 Index Closing Price')
+     
 
 def get_todays_stonks():
     key = 'I0yZMg8jBWJ2b3czdNFo5mwIBSHIydSzM2oTOWhMpHzo7V6jdhKkrIZ8cLqa' # api key
@@ -231,25 +267,25 @@ def compute_macd(data):
     histogram = macd_stripped - macd_signal_stripped
     return macd_26_stripped, macd_12_stripped, macd, histogram 
 
-def plot_macd(title, data, dates):
+def plot_macd(title, data, dates, macd_26, macd_12, macd, histogram):
     """Plot the MACD (1 year plus a 1 month summary with the 12-day EMA) of a stock, index, or mutual fund. 
     
     @param title: Title of the chart
     @param data: Data (stock closing prices, etc) as a 1D numpy array
     @param dates: A list of dates to map onto the xticks for plotting"""
     
-    macd_26_stripped, macd_12_stripped, macd, histogram = compute_macd(data)
+
     plt.figure()
     plt.subplot(211)
-    diff = len(dates) - len(macd_26_stripped) # Plots need the same size axes
+    diff = len(dates) - len(macd_26) # Plots need the same size axes
     dates_stripped = dates[diff:]
     entries = len(dates_stripped) 
     plt.xticks(np.arange(entries)[::26], dates_stripped[::26])
     title_str_7 = title + ' MACD (1 yr)'
     plt.title(title_str_7)
     plt.plot(np.arange(entries)[entries-365:], data[len(data)-365:], label=title)
-    plt.plot(np.arange(entries)[entries-365:], macd_26_stripped[entries-365:], label='26-day EMA')
-    plt.plot(np.arange(entries)[entries-365:], macd_12_stripped[entries-365:], label='12-day EMA')
+    plt.plot(np.arange(entries)[entries-365:], macd_26[entries-365:], label='26-day EMA')
+    plt.plot(np.arange(entries)[entries-365:], macd_12[entries-365:], label='12-day EMA')
     plt.legend() 
     plt.subplot(212) 
     xs_2 = np.arange(entries)[8:]
@@ -266,7 +302,7 @@ def plot_macd(title, data, dates):
     title_str_8 = title + ' MACD (1 month)'
     plt.title(title_str_8)
     plt.plot(np.arange(entries)[entries-30:], data[len(data)-30:], label=title)
-    plt.plot(np.arange(entries)[entries-30:], macd_12_stripped[entries-30:], label='12-day EMA')
+    plt.plot(np.arange(entries)[entries-30:], macd_12[entries-30:], label='12-day EMA')
     plt.legend()
     plt.subplot(212) 
     xs_2 = np.arange(entries)[8:]
@@ -276,6 +312,34 @@ def plot_macd(title, data, dates):
     plt.legend()
     return
 
+
+def get_margin_debt():
+    """Get margin debt data from the past year from FINRA"""
+    parser = FINRAMarginDebtHTMLParser()
+    url = 'https://www.finra.org/investors/margin-statistics'
+    r = requests.get(url)
+    parser.feed(r.text)
+    margin_debt = parser.get_margin_debt()
+    return margin_debt
+
+
+
+def plot_margin_debt(margin_debt):
+    """Plot the margin debt.
+    @param margin_debt: a dictionary with date strings as keys and margin debt in $ millions vals"""
+
+    entries = len(margin_debt)
+    date_sorted = sorted(margin_debt)
+    debt_sorted = [margin_debt[x] for x in date_sorted]
+    date_sorted_str = [str(x) for x in date_sorted]
+    plt.figure()
+    plt.xticks(np.arange(entries)[::2], date_sorted_str[::2])
+    plt.plot(np.arange(entries), debt_sorted)
+    title_str = 'US Margin Debt'
+    plt.title(title_str)
+    plt.axis([0, entries, 0, max(debt_sorted) * 1.1])
+    plt.xlabel('Date')
+    plt.ylabel('US Margin Debt (Millions $)')
 
 def main():
     print('-------------------------- here we are getting the -----------------------------')
@@ -403,7 +467,7 @@ def main():
 
 
     ################### Technical Analysis ###################################
-
+    
     stonks = get_todays_stonks()
     
     # Visualize the data
@@ -422,14 +486,22 @@ def main():
 
     # Make a table and save to CSV for reporting
     export_stonks_to_csv(stonks) 
-    """
     # Compute the MACD for the VIX
-    dates, vix_opens, vix_highs, vix_lows, vix_closes = load_vix_data()
+    vix_dates, vix_opens, vix_highs, vix_lows, vix_closes = load_vix_data()
     vix_closes_float = [float(x) for x in vix_closes]
-    plot_macd('Volatility Index', vix_closes_float, dates) 
-   
-    # Show all the plots
+    vix_macd_26, vix_macd_12, vix_macd, vix_histogram = compute_macd(data)
+    plot_macd('Volatility Index', vix_closes_float, vix_dates, macd_26, macd_12, \ 
+        vix_macd, vix_histogram) 
+    """ 
+    # Get total US Margin Debt
+    margin_debt = get_margin_debt()
+    plot_margin_debt(margin_debt)
+
+
+    sp_dates, sp_prices = get_sp500_data()
+    plot_sp500_vix(sp_dates, sp_prices, margin_debt)
     plt.show()
+
 # literally fuck you python I can't believe you make me do this every time
 if __name__ == "__main__":
     main()
