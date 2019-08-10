@@ -4,8 +4,18 @@ import datetime
 import numpy as np
 import json
 import re
+import os
+import pickle
 from datetime import date
 from FederalFundsRateHTMLParser import FederalFundsRateHTMLParser
+
+
+def LoadFromCache(fname):
+    j = None
+    with open('./cache/'+fname, 'rb') as f:
+        j = pickle.load(f)
+    return j
+
 
 def GetDate():
     now = date.today()
@@ -14,6 +24,10 @@ def GetDate():
     month = str(now_t[1])
     day = str(now_t[2])
     return year, month, day
+
+def cache_datestr():
+    y,m,d = GetDate()
+    return y + m + d
 
 def GetFedXMLEntry(url):
     """Returns the most recent Federal entry data from an XML tree found at url (must be a Federal yield curve/bill rate url)
@@ -50,6 +64,7 @@ def GetTreasuryBillRates():
 
 
 def GetTreasuryYields():    
+
     year, month, day = GetDate()
     # Construct HTTP GET request
     base_url = 'https://data.treasury.gov/feed.svc/DailyTreasuryYieldCurveRateData?$filter=month(NEW_DATE)%20eq%20'
@@ -59,7 +74,8 @@ def GetTreasuryYields():
     entry_date, entry = GetFedXMLEntry(base_url)
     yields = [float(x.text) for x in entry[6][0][2:14]]
     d = {'date': str(entry_date), 'yields': list(yields)}
-    return json.dumps(d)
+    j = json.dumps(d)
+    return j
 
 def GetFederalFundsRates():
     post_url = 'https://apps.newyorkfed.org/markets/autorates/fed-funds-search-result-page'
