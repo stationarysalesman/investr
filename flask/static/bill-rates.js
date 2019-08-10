@@ -5,7 +5,7 @@
 
   feather.replace()
 
-  $.getJSON('get-yield-curve',
+  $.getJSON('get-bill-rates',
           function(data, textStatus, jqXHR)
           {
               console.log(data)
@@ -18,17 +18,10 @@
                     '2 month',
                     '3 month',
                     '6 month',
-                    '1 year',
-                    '2 year',
-                    '3 year',
-                    '5 year',
-                    '7 year',
-                    '10 year',
-                    '20 year',
-                    '30 year'
+                    '1 year'
                   ],
                   datasets: [{
-                    data: data.yields,
+                    data: data.billrates,
                     lineTension: 0,
                     backgroundColor: 'transparent',
                     borderColor: '#007bff',
@@ -41,7 +34,7 @@
                     yAxes: [{
                         scaleLabel: {
                             display: true,
-                            labelString: "Yield (%)"
+                            labelString: "Interest (%)"
                         },
                       ticks: {
                         beginAtZero: false
@@ -59,13 +52,7 @@
                   }
                 }
               }) //end chart
-            // A few other metrics
-            var sp_10yr30yr = document.getElementById('spread-10yr3mo');
-            sp_10yr30yr.innerHTML = data.yields[9] - data.yields[2];
-            var sp_30yr10yr = document.getElementById('spread-30yr20yr');
-            sp_30yr10yr.innerHTML = data.yields[11] - data.yields[9];
-
-
+           
           }
     ) // end getJSON
 
