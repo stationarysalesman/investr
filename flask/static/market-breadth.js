@@ -15,7 +15,7 @@
                 data: {
                   labels: data.sorted_symbols,
                   datasets: [{
-                    data: data.sorted_prices,
+                    data: data.sorted_changes,
                     lineTension: 0,
                     backgroundColor: 'transparent',
                     borderColor: '#007bff',

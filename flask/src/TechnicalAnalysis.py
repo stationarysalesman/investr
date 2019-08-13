@@ -2,8 +2,26 @@ import requests
 import numpy as np
 import json
 import re
+import datetime
 from DJIAHTMLParser import DJIAHTMLParser
 from FINRAMarginDebtHTMLParser import FINRAMarginDebtHTMLParser
+
+
+def GetSP500():
+    key = 'I0yZMg8jBWJ2b3czdNFo5mwIBSHIydSzM2oTOWhMpHzo7V6jdhKkrIZ8cLqa' # api key
+    history_request_url = 'https://api.worldtradingdata.com/api/v1/history'
+    payload = {'symbol': '^INX', 'api_token':key}
+    r = requests.get(history_request_url, params=payload)
+    stock_json = json.loads(r.text)
+    stonk_tuples = []
+    for day in stock_json['history']:
+        y,m,d = re.split('-', day)
+        d = datetime.date(int(y), int(m), int(d))
+        stonk_tuples.append((d, stock_json['history'][day]['close']))
+    stonks_sorted = sorted(stonk_tuples, key = lambda s: s[0])
+    stonk_dates = [str(x[0]) for x in stonks_sorted]
+    stonk_closes = [x[1] for x in stonks_sorted]
+    return stonk_dates, stonk_closes
 
 def GetDJIAStonks():
     key = 'I0yZMg8jBWJ2b3czdNFo5mwIBSHIydSzM2oTOWhMpHzo7V6jdhKkrIZ8cLqa' # api key
